@@ -49,6 +49,10 @@ var (
 			initConfig()
 			initLogger()
 
+			//viper.Unmarshal(&f.d, func(config *mapstructure.DecoderConfig) {
+			//	config.ErrorUnused = true
+			//})
+
 			var coreConfig = clone.ConfigStruct{
 				Logger:             log,
 				DryRun:             viper.GetBool(flagDryRun),
@@ -97,7 +101,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP(flagGitlabAPIURL, "a", "", "GitLab API address if it is located at non-default path")
 	rootCmd.PersistentFlags().StringP(flagGitlabURL, "u", "", "GitLab address")
 	rootCmd.PersistentFlags().Int(flagListOptionsPerPage, 10, "For paginated result sets, the number of results to include per page")
-	rootCmd.PersistentFlags().StringP(flagLogLevel, "l", "warn", "Level of logging:\n  0 - panic\n  1 - fatal\n  2 - error\n  3 - warn (warning)\n  4 - info\n  5 - debug\n  6 - trace")
+	rootCmd.PersistentFlags().StringP(flagLogLevel, "l", "warn", "Level of logging:\n  0 - panic\n  1 - fatal\n  2 - error\n  3 - warn (warning)\n  4 - info\n  5 - debug\n  6 - trace\n")
 	rootCmd.PersistentFlags().StringP(flagToken, "t", "", "GitLab token from http://<gitlab>/profile/personal_access_tokens page")
 
 	var err error

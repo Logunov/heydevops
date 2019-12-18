@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	re "regexp"
 	"strings"
+	"sync"
 
 	. "github.com/Logunov/heydevops/helpers"
 	"github.com/xanzy/go-gitlab"
@@ -64,6 +65,7 @@ var (
 	gitLabClient               *gitlab.Client
 	reposSkipCloneRegexList    SkipCloneRegexStruct
 	branchesSkipCloneRegexList SkipCloneRegexStruct
+	gitMutex                   = &sync.Mutex{}
 )
 
 func Init(configPtr *ConfigStruct) {
@@ -122,6 +124,10 @@ func Clone() {
 
 	if config.Token == "" {
 		log.Fatal("GitLab Token is empty!")
+	}
+
+	if config.DryRun {
+		log.Info("Running in dry run mode, no really changes will be made")
 	}
 
 	gitLabClient = gitlab.NewClient(nil, config.Token)
@@ -194,7 +200,7 @@ func addProject(project *gitlab.Project) {
 	if config.ExpandBranches {
 		addMultiBranchRepo(project.ID, repoPath, project.SSHURLToRepo)
 	} else {
-		addSingleBranchRepo(repoPath, project.SSHURLToRepo, project.DefaultBranch)
+		go addSingleBranchRepo(repoPath, project.SSHURLToRepo, project.DefaultBranch)
 	}
 
 }
@@ -206,8 +212,8 @@ func checkSkipCloneRegexps(regexps SkipCloneRegexStruct, str string) bool {
 		if regexp.MatchString(str) {
 			cloneProject = true
 			log.WithFields(logrus.Fields{
-				"str":    str,
 				"regexp": regexp.String(),
+				"str":    str,
 			}).Trace("matched")
 			break
 		}
@@ -223,8 +229,8 @@ func checkSkipCloneRegexps(regexps SkipCloneRegexStruct, str string) bool {
 	for _, regexp := range regexps.Skip {
 		if regexp.MatchString(str) {
 			log.WithFields(logrus.Fields{
-				"str":    str,
 				"regexp": regexp.String(),
+				"str":    str,
 			}).Trace("skipped due to skip regexp")
 			return false
 		}
@@ -251,6 +257,7 @@ func addMultiBranchRepo(projectID int, path string, SSHURLToRepo string) {
 			path := strings.Join([]string{
 				path,
 				config.Branches.Prefix,
+				"/",
 				strings.ReplaceAll(branch.Name, "/", config.Branches.Slash),
 			}, "")
 			go addSingleBranchRepo(path, SSHURLToRepo, branch.Name)
@@ -270,8 +277,8 @@ func addSingleBranchRepo(path string, SSHURLToRepo string, branch string) {
 	if config.ExpandBranches {
 		if !checkSkipCloneRegexps(branchesSkipCloneRegexList, branch) {
 			log.WithFields(logrus.Fields{
-				"repo":   path,
 				"branch": branch,
+				"path":   path,
 			}).Debug("branch skipped")
 
 			return
@@ -279,19 +286,22 @@ func addSingleBranchRepo(path string, SSHURLToRepo string, branch string) {
 	}
 
 	log.WithFields(logrus.Fields{
-		"repo":   path,
 		"branch": branch,
+		"path":   path,
 	}).Debug("branch clone started")
 
-	runCommand(".", "git", "submodule", "add", "--force", "-b", branch, SSHURLToRepo, path)
-	runCommand(path, "git", " checkout", branch)
-	runCommand(path, "git", " pull")
+	gitMutex.Lock()
+	runCommand("./", "git", "submodule", "add", "--force", "-b", branch, SSHURLToRepo, path)
+	gitMutex.Unlock()
+	runCommand(path, "git", "checkout", branch)
+	runCommand(path, "git", "pull")
 }
 
 func runCommand(path string, command string, args ...string) {
 	log.WithFields(logrus.Fields{
-		"path": path,
+		"args": args,
 		"cmd":  command,
+		"path": path,
 	}).Trace("runCommand: start")
 
 	if config.DryRun {
@@ -304,14 +314,16 @@ func runCommand(path string, command string, args ...string) {
 	// And when you need to wait for the command to finish:
 	if err := cmd.Run(); err != nil {
 		log.WithFields(logrus.Fields{
-			"path": path,
+			"args": args,
 			"cmd":  command,
 			"err":  err,
+			"path": path,
 		}).Error("runCommand: returned error")
 	}
 
 	log.WithFields(logrus.Fields{
-		"path": path,
+		"args": args,
 		"cmd":  command,
+		"path": path,
 	}).Trace("runCommand: end")
 }

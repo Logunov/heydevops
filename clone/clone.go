@@ -256,8 +256,8 @@ func addMultiBranchRepo(projectID int, path string, SSHURLToRepo string) {
 		for _, branch := range branches {
 			path := strings.Join([]string{
 				path,
-				config.Branches.Prefix,
 				"/",
+				config.Branches.Prefix,
 				strings.ReplaceAll(branch.Name, "/", config.Branches.Slash),
 			}, "")
 			go addSingleBranchRepo(path, SSHURLToRepo, branch.Name)

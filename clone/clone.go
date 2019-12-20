@@ -18,14 +18,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package clone
 
 import (
+	. "github.com/Logunov/heydevops/helpers"
 	"github.com/sirupsen/logrus"
+	"github.com/xanzy/go-gitlab"
+	"os"
 	"os/exec"
 	re "regexp"
 	"strings"
 	"sync"
-
-	. "github.com/Logunov/heydevops/helpers"
-	"github.com/xanzy/go-gitlab"
 )
 
 type ConfigStruct struct {
@@ -37,6 +37,7 @@ type ConfigStruct struct {
 	Token                     string
 	DetectMultiBranchFileName string
 	RootRemove                string
+	CloneThreadsCount         int
 	ListOptionsPerPage        int
 	Repos                     SkipCloneStringsStruct
 	Branches                  BranchesStruct
@@ -65,12 +66,16 @@ var (
 	gitLabClient               *gitlab.Client
 	reposSkipCloneRegexList    SkipCloneRegexStruct
 	branchesSkipCloneRegexList SkipCloneRegexStruct
-	gitMutex                   = &sync.Mutex{}
+	gitMutex                   sync.Mutex
+	waitGroup                  sync.WaitGroup
 )
 
 func Init(configPtr *ConfigStruct) {
 	config = configPtr
 	log = config.Logger
+
+	addSlashIfEndWithOutSlash(&config.GitLabURL)
+	addSlashIfEndWithOutSlash(&config.GitLabAPIURL)
 
 	log.Trace("Config Dry Run: ", config.DryRun)
 	log.Trace("Config GitLabURL: ", config.GitLabURL)
@@ -96,6 +101,12 @@ func Init(configPtr *ConfigStruct) {
 	logTraceSkipCloneRegexps("Regexp Branches Skipinfo", branchesSkipCloneRegexList.Skip)
 
 	log.Trace("Core init done")
+}
+
+func addSlashIfEndWithOutSlash(strPtr *string) {
+	if (*strPtr)[len(*strPtr)-1:] != "/" {
+		*strPtr += "/"
+	}
 }
 
 func compileSkipCloneRegexps(stringsSkipClone []string) []*re.Regexp {
@@ -144,14 +155,20 @@ func Clone() {
 		},
 	}
 
+	projectsChan := make(chan *gitlab.Project, config.CloneThreadsCount)
+	for i := 0; i < config.CloneThreadsCount; i++ {
+		waitGroup.Add(1)
+		go addProject(projectsChan, &waitGroup)
+	}
+
 	for {
-		// Get the first page with projects.
+		// Get the first page with projectsChan.
 		projects, response, err := gitLabClient.Projects.ListProjects(listProjectsOptions)
 		CheckPanic(err)
 
-		// List all the projects we've found so far.
+		// List all the projectsChan we've found so far.
 		for _, project := range projects {
-			addProject(project)
+			projectsChan <- project
 		}
 
 		// Exit the loop when we've seen all pages.
@@ -162,53 +179,58 @@ func Clone() {
 		// Update the page number to get the next page.
 		listProjectsOptions.Page = response.NextPage
 	}
+
+	close(projectsChan)
+	log.Debug("All repos found, now waiting for cloning them ...")
+	waitGroup.Wait()
 }
 
-func addProject(project *gitlab.Project) {
-	repoPath := strings.ReplaceAll(project.WebURL, config.GitLabURL, "")
-	log.WithFields(logrus.Fields{
-		"repo": repoPath,
-	}).Debug("project found")
+func addProject(projectsPtr <-chan *gitlab.Project, waitGroup *sync.WaitGroup) {
+	for projectPtr := range projectsPtr {
+		repoPath := strings.ReplaceAll(projectPtr.WebURL, config.GitLabURL+config.RootRemove, "")
 
-	if !checkSkipCloneRegexps(reposSkipCloneRegexList, repoPath) {
+		if config.RootRemove != "" {
+			repoPath = strings.ReplaceAll(repoPath, config.RootRemove, "")
+		}
+
 		log.WithFields(logrus.Fields{
 			"repo": repoPath,
-		}).Info("repo skipped")
+		}).Debug("project found")
 
-		return
+		if !checkSkipCloneRegexps(&reposSkipCloneRegexList, repoPath) {
+			log.WithFields(logrus.Fields{
+				"repo": repoPath,
+			}).Info("repo skipped")
+		} else {
+			log.WithFields(logrus.Fields{
+				"repo": repoPath,
+			}).Info("repo clone started")
+
+			// Unused, not needed now
+			//if config.DetectMultiBranchFileName != "" {
+			//	getFileMetaDataOptions := &gitlab.GetFileMetaDataOptions{
+			//		Ref: gitlab.String(projectPtr.DefaultBranch),
+			//	}
+			//	_, _, err := gitLabClient.RepositoryFiles.GetFileMetaData(projectPtr.ID, config.DetectMultiBranchFileName, getFileMetaDataOptions)
+			//	if err == nil {
+			//		addMultiBranchRepo(projectPtr.ID, repoPath, projectPtr.SSHURLToRepo)
+			//	}
+			//}
+
+			if config.ExpandBranches {
+				addMultiBranchRepo(repoPath, projectPtr)
+			} else {
+				addSingleBranchRepo(repoPath, projectPtr.SSHURLToRepo, projectPtr.DefaultBranch, true, "")
+			}
+		}
 	}
-
-	log.WithFields(logrus.Fields{
-		"repo": repoPath,
-	}).Info("repo clone started")
-
-	if config.RootRemove != "" {
-		repoPath = strings.ReplaceAll(repoPath, config.RootRemove, "")
-	}
-
-	// Unused, not needed now
-	//if config.DetectMultiBranchFileName != "" {
-	//	getFileMetaDataOptions := &gitlab.GetFileMetaDataOptions{
-	//		Ref: gitlab.String(project.DefaultBranch),
-	//	}
-	//	_, _, err := gitLabClient.RepositoryFiles.GetFileMetaData(project.ID, config.DetectMultiBranchFileName, getFileMetaDataOptions)
-	//	if err == nil {
-	//		addMultiBranchRepo(project.ID, repoPath, project.SSHURLToRepo)
-	//	}
-	//}
-
-	if config.ExpandBranches {
-		addMultiBranchRepo(project.ID, repoPath, project.SSHURLToRepo)
-	} else {
-		go addSingleBranchRepo(repoPath, project.SSHURLToRepo, project.DefaultBranch)
-	}
-
+	waitGroup.Done()
 }
 
-func checkSkipCloneRegexps(regexps SkipCloneRegexStruct, str string) bool {
+func checkSkipCloneRegexps(regexpsPtr *SkipCloneRegexStruct, str string) bool {
 	cloneProject := false
 
-	for _, regexp := range regexps.Clone {
+	for _, regexp := range regexpsPtr.Clone {
 		if regexp.MatchString(str) {
 			cloneProject = true
 			log.WithFields(logrus.Fields{
@@ -226,7 +248,7 @@ func checkSkipCloneRegexps(regexps SkipCloneRegexStruct, str string) bool {
 		return false
 	}
 
-	for _, regexp := range regexps.Skip {
+	for _, regexp := range regexpsPtr.Skip {
 		if regexp.MatchString(str) {
 			log.WithFields(logrus.Fields{
 				"regexp": regexp.String(),
@@ -239,7 +261,7 @@ func checkSkipCloneRegexps(regexps SkipCloneRegexStruct, str string) bool {
 	return true
 }
 
-func addMultiBranchRepo(projectID int, path string, SSHURLToRepo string) {
+func addMultiBranchRepo(repoPath string, projectPtr *gitlab.Project) {
 	listBranchesOptions := &gitlab.ListBranchesOptions{
 		ListOptions: gitlab.ListOptions{
 			PerPage: config.ListOptionsPerPage,
@@ -247,20 +269,18 @@ func addMultiBranchRepo(projectID int, path string, SSHURLToRepo string) {
 		},
 	}
 
+	addSingleBranchRepo(repoPath, projectPtr.SSHURLToRepo, projectPtr.DefaultBranch, true, "")
+
 	for {
 		// Get the first page with Branches.
-		branches, resp, err := gitLabClient.Branches.ListBranches(projectID, listBranchesOptions)
+		branches, resp, err := gitLabClient.Branches.ListBranches(projectPtr.ID, listBranchesOptions)
 		CheckPanic(err)
 
 		// List all the Branches we've found so far.
 		for _, branch := range branches {
-			path := strings.Join([]string{
-				path,
-				"/",
-				config.Branches.Prefix,
-				strings.ReplaceAll(branch.Name, "/", config.Branches.Slash),
-			}, "")
-			go addSingleBranchRepo(path, SSHURLToRepo, branch.Name)
+			if !branch.Default {
+				addSingleBranchRepo(repoPath, projectPtr.SSHURLToRepo, branch.Name, branch.Default, projectPtr.DefaultBranch)
+			}
 		}
 
 		// Exit the loop when we've seen all pages.
@@ -273,12 +293,27 @@ func addMultiBranchRepo(projectID int, path string, SSHURLToRepo string) {
 	}
 }
 
-func addSingleBranchRepo(path string, SSHURLToRepo string, branch string) {
+func addSingleBranchRepo(repoPath string, SSHURLToRepo string, branch string, isDefaultBranch bool, defaultBranch string) {
+	var branchSlug, branchPath string
+
+	if config.ExpandBranches == true {
+		branchSlug = getBranchSlug(branch)
+		branchPath = strings.Join([]string{
+			repoPath,
+			"/",
+			config.Branches.Prefix,
+			branchSlug,
+		}, "")
+	} else {
+		branchPath = repoPath
+	}
+
 	if config.ExpandBranches {
-		if !checkSkipCloneRegexps(branchesSkipCloneRegexList, branch) {
+		if !checkSkipCloneRegexps(&branchesSkipCloneRegexList, branch) {
 			log.WithFields(logrus.Fields{
-				"branch": branch,
-				"path":   path,
+				"branch":     branch,
+				"branchPath": branchPath,
+				"repoPath":   repoPath,
 			}).Debug("branch skipped")
 
 			return
@@ -286,15 +321,30 @@ func addSingleBranchRepo(path string, SSHURLToRepo string, branch string) {
 	}
 
 	log.WithFields(logrus.Fields{
-		"branch": branch,
-		"path":   path,
+		"repoPath":      repoPath,
+		"branch":        branch,
+		"branchPath":    branchPath,
+		"defaultBranch": defaultBranch,
 	}).Debug("branch clone started")
 
-	gitMutex.Lock()
-	runCommand("./", "git", "submodule", "add", "--force", "-b", branch, SSHURLToRepo, path)
-	gitMutex.Unlock()
-	runCommand(path, "git", "checkout", branch)
-	runCommand(path, "git", "pull")
+	_, err := os.Stat(branchPath)
+	if os.IsNotExist(err) {
+		if isDefaultBranch {
+			gitMutex.Lock()
+			runCommand("./", "git", "submodule", "add", "--force", "-b", branch, SSHURLToRepo, branchPath)
+			gitMutex.Unlock()
+		} else {
+			defaultBranchPath := repoPath + "/" + config.Branches.Prefix + getBranchSlug(defaultBranch)
+			runCommand(defaultBranchPath,
+				"git", "worktree", "add", "../"+config.Branches.Prefix+branchSlug, branch)
+		}
+	}
+	runCommand(branchPath, "git", "checkout", branch)
+	runCommand(branchPath, "git", "pull")
+}
+
+func getBranchSlug(str string) string {
+	return strings.ReplaceAll(str, "/", config.Branches.Slash)
 }
 
 func runCommand(path string, command string, args ...string) {
@@ -313,12 +363,21 @@ func runCommand(path string, command string, args ...string) {
 
 	// And when you need to wait for the command to finish:
 	if err := cmd.Run(); err != nil {
+		//if err.Error() == "exit status 128" {
+		//	log.WithFields(logrus.Fields{
+		//		"args": args,
+		//		"cmd":  command,
+		//		"err":  err,
+		//		"path": path,
+		//	}).Debug("runCommand: returned error")
+		//} else {
 		log.WithFields(logrus.Fields{
 			"args": args,
 			"cmd":  command,
 			"err":  err,
 			"path": path,
 		}).Error("runCommand: returned error")
+		//}
 	}
 
 	log.WithFields(logrus.Fields{

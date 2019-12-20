@@ -38,6 +38,7 @@ var (
 	flagDryRun             = "dry-run"
 	flagExpandBranches     = "expand-branches"
 	flagLogLevel           = "log-level"
+	flagCloneThreadsCount  = "clone-threads"
 	flagListOptionsPerPage = "list-options-per-page"
 
 	// rootCmd represents the base command when called without any subcommands
@@ -60,6 +61,7 @@ var (
 				GitLabURL:          viper.GetString(flagGitlabURL),
 				GitLabAPIURL:       viper.GetString(flagGitlabAPIURL),
 				Token:              viper.GetString(flagToken),
+				CloneThreadsCount:  viper.GetInt(flagCloneThreadsCount),
 				ListOptionsPerPage: viper.GetInt(flagListOptionsPerPage),
 				Repos: clone.SkipCloneStringsStruct{
 					Clone: viper.GetStringSlice("repos.clone"),
@@ -95,12 +97,13 @@ func init() {
 	log.SetOutput(os.Stdout)
 	log.SetLevel(logrus.WarnLevel)
 
-	rootCmd.PersistentFlags().StringP(flagConfig, "c", "heydevops.yaml", "config file")
-	rootCmd.PersistentFlags().BoolP(flagDryRun, "n", false, "If true, only print without changing anything")
+	rootCmd.PersistentFlags().StringP(flagConfig, "c", "./heydevops.yaml", "config file")
+	rootCmd.PersistentFlags().BoolP(flagDryRun, "n", false, "If true, don't do any changes")
 	rootCmd.PersistentFlags().BoolP(flagExpandBranches, "b", false, "If true, branches will be expanded into subdirectories")
 	rootCmd.PersistentFlags().StringP(flagGitlabAPIURL, "a", "", "GitLab API address if it is located at non-default path")
 	rootCmd.PersistentFlags().StringP(flagGitlabURL, "u", "", "GitLab address")
-	rootCmd.PersistentFlags().Int(flagListOptionsPerPage, 10, "For paginated result sets, the number of results to include per page")
+	rootCmd.PersistentFlags().Int(flagCloneThreadsCount, 10, "Working threads count")
+	rootCmd.PersistentFlags().Int(flagListOptionsPerPage, 10, "For paginated result sets, the number of results to include \nper page")
 	rootCmd.PersistentFlags().StringP(flagLogLevel, "l", "warn", "Level of logging:\n  0 - panic\n  1 - fatal\n  2 - error\n  3 - warn (warning)\n  4 - info\n  5 - debug\n  6 - trace\n")
 	rootCmd.PersistentFlags().StringP(flagToken, "t", "", "GitLab token from http://<gitlab>/profile/personal_access_tokens page")
 
@@ -119,6 +122,9 @@ func init() {
 	helpers.CheckDebug(err)
 
 	err = viper.BindPFlag(flagGitlabURL, rootCmd.PersistentFlags().Lookup(flagGitlabURL))
+	helpers.CheckDebug(err)
+
+	err = viper.BindPFlag(flagCloneThreadsCount, rootCmd.PersistentFlags().Lookup(flagCloneThreadsCount))
 	helpers.CheckDebug(err)
 
 	err = viper.BindPFlag(flagListOptionsPerPage, rootCmd.PersistentFlags().Lookup(flagListOptionsPerPage))

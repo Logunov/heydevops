@@ -66,30 +66,41 @@ TODO: Add environment variables description
 
 ### Example
 
+#### Preparation
+
+First of all you need an initialized git repository to run this tool. You can use already existing repository or create it:
+
+```shell script
+mkdir -p ~/gitlab/group/clone/here && cd $_
+git init
+```
+
 ##### Dry run and pass token via environment variable
-```sh
+```shell script
 export HEYDEVOPS_TOKEN="<GITLAB_PERSONAL_ACCESS_TOKEN>"
 heydevops -n
 ```
 
 ##### Set log level to info and pass token via flag
 
-```sh
+```shell script
 heydevops -l INFO -t <TOKEN>
 ```
 
 ##### Set log level to debug and save stdout & stderr to log file  
 
-```sh
+```shell script
 heydevops -l DEBUG 2>&1 | tee logs/heydevops-(date "+%Y%m%d%H%M").log
 ```
 
 #### Completion
 
 To load completion run:
-```sh
+
+```shell script
 source <(heydevops completion $SHELL)
 ```
+
 ```
 Usage:
   heydevops completion [command]

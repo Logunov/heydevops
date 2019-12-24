@@ -99,12 +99,12 @@ func init() {
 
 	rootCmd.PersistentFlags().StringP(flagConfig, "c", "./heydevops.yaml", "config file")
 	rootCmd.PersistentFlags().BoolP(flagDryRun, "n", false, "If true, don't do any changes")
-	rootCmd.PersistentFlags().BoolP(flagExpandBranches, "b", false, "If true, branches will be expanded into subdirectories")
+	rootCmd.PersistentFlags().BoolP(flagExpandBranches, "b", false, "If true, branches will be expanded into git worktrees")
 	rootCmd.PersistentFlags().StringP(flagGitlabAPIURL, "a", "", "GitLab API address if it is located at non-default path")
 	rootCmd.PersistentFlags().StringP(flagGitlabURL, "u", "", "GitLab address")
 	rootCmd.PersistentFlags().Int(flagCloneThreadsCount, 10, "Working threads count")
-	rootCmd.PersistentFlags().Int(flagListOptionsPerPage, 10, "For paginated result sets, the number of results to include \nper page")
-	rootCmd.PersistentFlags().StringP(flagLogLevel, "l", "warn", "Level of logging:\n  0 - panic\n  1 - fatal\n  2 - error\n  3 - warn (warning)\n  4 - info\n  5 - debug\n  6 - trace\n")
+	rootCmd.PersistentFlags().Int(flagListOptionsPerPage, 10, "For paginated GitLab API call result sets, the number of results \nto include per page")
+	rootCmd.PersistentFlags().StringP(flagLogLevel, "l", "warn", "Level of logging: \nPANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE")
 	rootCmd.PersistentFlags().StringP(flagToken, "t", "", "GitLab token from http://<gitlab>/profile/personal_access_tokens page")
 
 	var err error

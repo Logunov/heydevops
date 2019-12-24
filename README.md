@@ -14,21 +14,14 @@ heydevops [flags]
       --clone-threads int           Working threads count (default 10)
   -c, --config string               config file (default "./heydevops.yaml")
   -n, --dry-run                     If true, don't do any changes
-  -b, --expand-branches             If true, branches will be expanded into subdirectories
+  -b, --expand-branches             If true, branches will be expanded into git worktrees
   -a, --gitlab-api-url string       GitLab API address if it is located at non-default path
   -u, --gitlab-url string           GitLab address
   -h, --help                        help for heydevops
-      --list-options-per-page int   For paginated result sets, the number of results to include
-                                    per page (default 10)
-  -l, --log-level string            Level of logging:
-                                      0 - panic
-                                      1 - fatal
-                                      2 - error
-                                      3 - warn (warning)
-                                      4 - info
-                                      5 - debug
-                                      6 - trace
-                                     (default "warn")
+      --list-options-per-page int   For paginated GitLab API call result sets, the number of results 
+                                    to include per page (default 10)
+  -l, --log-level string            Level of logging: 
+                                    PANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE (default "warn")
   -t, --token string                GitLab token from http://<gitlab>/profile/personal_access_tokens page
 ```
 
@@ -87,10 +80,10 @@ heydevops -n
 heydevops -l INFO -t <TOKEN>
 ```
 
-##### Set log level to debug and save stdout & stderr to log file  
+##### Set log level to debug and save stdout & stderr to log file
 
 ```shell script
-heydevops -l DEBUG 2>&1 | tee logs/heydevops-(date "+%Y%m%d%H%M").log
+heydevops -l DEBUG 2>&1 | tee logs/heydevops-$(date "+%Y%m%d%H%M").log
 ```
 
 #### Completion

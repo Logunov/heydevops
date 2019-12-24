@@ -18,9 +18,9 @@ heydevops [flags]
   -a, --gitlab-api-url string       GitLab API address if it is located at non-default path
   -u, --gitlab-url string           GitLab address
   -h, --help                        help for heydevops
-      --list-options-per-page int   For paginated GitLab API call result sets, the number of results 
+      --list-options-per-page int   For paginated GitLab API call result sets, the number of results
                                     to include per page (default 10)
-  -l, --log-level string            Level of logging: 
+  -l, --log-level string            Level of logging:
                                     PANIC, FATAL, ERROR, WARN, INFO, DEBUG, TRACE (default "warn")
   -t, --token string                GitLab token from http://<gitlab>/profile/personal_access_tokens page
 ```
@@ -66,6 +66,8 @@ First of all you need an initialized git repository to run this tool. You can us
 ```shell script
 mkdir -p ~/gitlab/group/clone/here && cd $_
 git init
+# create configuration file
+vim heydevops.yaml
 ```
 
 ##### Dry run and pass token via environment variable

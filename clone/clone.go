@@ -131,7 +131,7 @@ func logTraceSkipCloneRegexps(msg string, regexps []*re.Regexp) {
 }
 
 func Clone() {
-	defer Elapsed("Total")()
+	defer Elapsed("Clone")()
 
 	if config.Token == "" {
 		log.Fatal("GitLab Token is empty!")

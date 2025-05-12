@@ -1,12 +1,13 @@
 module github.com/Logunov/heydevops
 
-go 1.13
+go 1.21.1
+
 toolchain go1.24.1
 
 require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/viper v1.20.0
+	github.com/spf13/viper v1.20.1
 	github.com/xanzy/go-gitlab v0.115.0
 )
 
